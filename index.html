@@ -1,0 +1,2017 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>描画機能付きメモ帳</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Hachi+Maru+Pop&family=Klee+One&family=Mochiy+Pop+P+One&family=Potta+One&family=Rampart+One&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+  <style>
+    /* テーマカラー設定 */
+    :root {
+      --theme-color: #0078d4; /* Word Blue */
+      --theme-hover: #005a9e;
+      --ribbon-bg: #f0f0f0;
+      --tab-bar-bg: white;
+      --editor-bg: #fff;
+      --ribbon-height: 80px; /* タブバーとパネルの合計高さをコンパクトに調整 */
+      --file-menu-width: 280px;
+      --file-menu-bg: #2b2b2b;
+      --modal-bg: #fff;
+    }
+
+    /* エディタのデフォルトフォント設定 */
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #e5e5e5;
+    }
+
+    /* カスタムフォントの適用 */
+    .font-arial { font-family: Arial, sans-serif; }
+    .font-hachi-maru-pop { font-family: 'Hachi Maru Pop', cursive; }
+    .font-potta-one { font-family: 'Potta One', cursive; }
+    .font-klee-one { font-family: 'Klee One', cursive; }
+    .font-rampart-one { font-family: 'Rampart One', cursive; }
+    .font-mochiy-pop-p-one { font-family: 'Mochiy Pop P One', sans-serif; }
+    
+    /* --- トップバーコンテナ (ファイルボタンとタブバーを含む) --- */
+    .top-bar-container {
+      display: flex;
+      align-items: flex-end;
+      background-color: var(--tab-bar-bg);
+      border-bottom: 1px solid #ccc;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      user-select: none;
+    }
+
+    /* --- ファイルボタン (タブデザインに統一) --- */
+    .file-button {
+      padding: 8px 15px;
+      margin-left: 10px;
+      margin-right: 5px;
+      border: none;
+      background-color: transparent;
+      color: #333;
+      cursor: pointer;
+      font-size: 0.9em;
+      font-weight: 500;
+      border-radius: 4px 4px 0 0;
+      transition: all 0.2s;
+      height: 38px;
+      box-sizing: border-box;
+    }
+
+    .file-button:hover {
+        background-color: #e0e0e0;
+    }
+
+    .file-button.active {
+      background-color: var(--ribbon-bg);
+      border-bottom: 3px solid var(--theme-color);
+      color: #000;
+      font-weight: 600;
+    }
+
+    /* --- リボン全体 --- */
+    .ribbon-container {
+      background-color: var(--ribbon-bg);
+      border-bottom: 1px solid #ccc;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      user-select: none;
+    }
+
+    /* --- タブバー (ホーム、挿入、表示, 描画) --- */
+    .tab-bar {
+      display: flex;
+      padding: 0 10px;
+      height: 38px;
+    }
+
+    .tab-button {
+      padding: 8px 15px;
+      border: none;
+      background-color: transparent;
+      color: #333;
+      cursor: pointer;
+      font-size: 0.9em;
+      font-weight: 500;
+      transition: all 0.2s;
+      border-radius: 4px 4px 0 0;
+      margin-right: 2px;
+    }
+
+    .tab-button:hover {
+      background-color: #e0e0e0;
+    }
+
+    .tab-button.active {
+      background-color: var(--ribbon-bg);
+      border-bottom: 3px solid var(--theme-color);
+      color: #000;
+      font-weight: 600;
+    }
+
+    /* --- タブパネル (ツールの本体) --- */
+    .tab-panel {
+      display: flex;
+      padding: 8px 15px;
+      gap: 15px;
+      align-items: center; /* ツールを中央に揃える */
+      height: 40px; /* パネルの高さをコンパクトに */
+    }
+
+    /* --- グループ (フォント、段落など) --- */
+    .ribbon-group {
+      display: flex; /* これによりツールが横に並ぶ */
+      flex-direction: row; /* 水平に並べる */
+      align-items: center;
+      gap: 6px; /* ツール間のスペースを確保 */
+      padding: 0 10px;
+      border-right: 1px solid #ddd;
+      height: 100%;
+      box-sizing: border-box;
+      position: relative;
+    }
+
+    .ribbon-group:last-child {
+      border-right: none;
+    }
+
+    /* グループラベルは非表示またはスタイル調整 */
+    .group-label {
+      display: none; /* グループラベルを非表示にして、コンパクトなリボンを実現 */
+    }
+
+    .ribbon-tools {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .ribbon-group button, .ribbon-group select, .ribbon-group input[type="number"] {
+        padding: 4px 6px;
+        font-size: 0.8em;
+        background-color: white;
+        color: #333;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        transition: background-color 0.1s ease, border-color 0.1s ease;
+        height: 30px;
+        min-width: 30px;
+        box-sizing: border-box;
+    }
+    
+    /* ボタンのアクティブ状態のスタイル (重要: 追加/変更された部分) */
+    .ribbon-group button:hover {
+        background-color: #e0e0e0;
+        border-color: #a0a0a0;
+    }
+    
+    .ribbon-group button.active {
+        background-color: var(--theme-color);
+        color: white;
+        border-color: var(--theme-color);
+    }
+    
+    /* フォントセレクタの幅を広げる */
+    #font-selector {
+        width: 150px; 
+    }
+    
+    /* フォントサイズ入力と色のドロップダウンの幅を調整 */
+    .ribbon-group select:not(#font-selector), #font-size-input {
+        width: 60px; /* サイズ調整 */
+    }
+    
+    /* 蛍光ペンセレクタの幅を調整 */
+    #highlight-selector {
+        width: 60px;
+        padding-left: 2px;
+        padding-right: 2px;
+    }
+
+    /* 新規追加: 描画キャンバスのスタイル */
+    #drawing-canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 10; /* エディタの上に重ねる */
+        pointer-events: none; /* デフォルトではエディタの操作を妨げない */
+    }
+
+    /* エディタとキャンバスのコンテナ */
+    .document {
+      height: calc(100% - var(--ribbon-height)); /* リボンの高さを考慮 */
+      padding: 1em;
+      box-sizing: border-box;
+      position: relative; /* キャンバス、テキストボックス、画像を重ねるための基準 */
+    }
+
+    #editor {
+      width: 100%;
+      height: 100%;
+      background-color: var(--editor-bg);
+      padding: 1em;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      border-radius: 8px;
+      box-sizing: border-box;
+      overflow-y: auto;
+      outline: none;
+      line-height: 1.6;
+      font-size: 1rem; /* 16px 相当 */
+      /* デフォルトのフォントを設定 */
+      font-family: Arial, sans-serif;
+      z-index: 5; /* キャンバスの下に配置 */
+      position: relative;
+    }
+
+    #editor:empty::before {
+      content: "ここにメモを書いてください...";
+      color: #aaa;
+    }
+    
+    /* ⭐ 修正: Draggable Element Styles (リサイズ機能の追加) ⭐ */
+    .draggable-element {
+        position: absolute; /* Documentコンテナ内で自由に配置 */
+        z-index: 20; /* エディタ、キャンバスの上に配置 */
+        cursor: grab;
+        border: 1px dashed #aaa;
+        padding: 5px;
+        box-sizing: border-box;
+        background-color: rgba(255, 255, 255, 0.8);
+        transition: box-shadow 0.1s, border-color 0.1s;
+        border-radius: 4px;
+        user-select: none;
+        resize: both; /* リサイズを可能にする (画像、テキストボックス共通) */
+        overflow: auto; /* リサイズ時のスクロールバー対応 */
+    }
+    
+    .draggable-element:hover {
+        border-color: var(--theme-color);
+        box-shadow: 0 0 5px rgba(0, 120, 212, 0.5);
+    }
+
+    .draggable-textbox {
+        min-width: 150px;
+        min-height: 50px;
+        padding: 8px; 
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+    }
+    
+    .draggable-textbox[contenteditable="true"]:focus {
+        border-color: var(--theme-color);
+        outline: none;
+        box-shadow: 0 0 5px rgba(0, 120, 212, 0.8);
+    }
+
+    /* ピン留めされた状態 (ドラッグ不可, 赤い枠線) */
+    .draggable-element.pinned {
+        cursor: default !important; 
+        border: 1px solid red; /* ピン留めを視覚的に強調 */
+        box-shadow: 0 0 5px rgba(255, 0, 0, 0.5);
+        opacity: 0.9;
+    }
+    
+    /* 画像のスタイル (コンテナに合わせて伸縮させる) */
+    .draggable-element img {
+        max-width: 100%;
+        max-height: 100%;
+        width: 100%;
+        height: 100%;
+        object-fit: contain; /* 画像が歪まないようにコンテナにフィット */
+        display: block;
+        pointer-events: none; 
+    }
+    
+    /* ⭐ 新規追加/修正: 画像出力時に適用する非表示スタイル ⭐ */
+    .export-mode .draggable-element {
+        resize: none !important; /* リサイズハンドルを非表示 */
+        border: 1px solid transparent !important; /* 枠線を透明にする */
+        box-shadow: none !important; /* シャドウを非表示 */
+        cursor: default !important; /* カーソルも非表示 */
+    }
+
+    .export-mode .draggable-element.pinned {
+        border-color: transparent !important; /* 赤い枠線も非表示 */
+        box-shadow: none !important;
+    }
+
+    /* ⭐ 新規追加: カスタムコンテキストメニューのスタイル ⭐ */
+    #custom-context-menu {
+        position: fixed; /* bodyに対して固定 */
+        z-index: 10000;
+        background-color: white;
+        border: 1px solid #ccc;
+        box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+        padding: 5px 0;
+        display: none;
+        list-style: none;
+        margin: 0;
+        border-radius: 4px;
+        min-width: 180px;
+    }
+    
+    #custom-context-menu li {
+        padding: 8px 15px;
+        cursor: pointer;
+        font-size: 0.9em;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #333;
+        position: relative; /* サブメニューの基準 */
+    }
+    
+    #custom-context-menu li:hover {
+        background-color: var(--theme-color);
+        color: white;
+    }
+    
+    /* ⭐ 新規追加: 枠線色サブメニューのスタイル ⭐ */
+    .submenu {
+        position: absolute;
+        top: 0;
+        left: 100%;
+        background-color: white;
+        border: 1px solid #ccc;
+        box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+        padding: 5px 0;
+        display: none;
+        min-width: 120px;
+        border-radius: 4px;
+    }
+    
+    #custom-context-menu li:hover > .submenu {
+        display: block;
+    }
+    
+    .submenu-color-option {
+        width: 100%;
+        padding: 5px 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .color-swatch {
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        border: 1px solid #ccc;
+        box-sizing: border-box;
+    }
+    
+    .submenu-color-option:hover {
+        background-color: #eee;
+        color: #333; /* ホバー色をリセット */
+    }
+
+
+    /* --- ファイルメニューオーバーレイ (アニメーション追加) --- */
+    .file-menu-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5); 
+        z-index: 999;
+        display: none;
+        justify-content: flex-start;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+    
+    .file-menu-overlay.open {
+        display: flex;
+        opacity: 1;
+    }
+
+    .menu-options-pane {
+        width: var(--file-menu-width);
+        background-color: var(--file-menu-bg);
+        padding: 20px 0;
+        box-shadow: 2px 0 5px rgba(0, 0, 0, 0.3);
+        display: flex;
+        flex-direction: column;
+        color: white;
+        
+        /* スライドインアニメーション設定 */
+        transform: translateX(-100%);
+        transition: transform 0.3s ease-out;
+    }
+
+    .file-menu-overlay.open .menu-options-pane {
+        transform: translateX(0);
+    }
+
+    .menu-detail-pane {
+        flex-grow: 1; 
+    }
+
+    .menu-option {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 12px 20px;
+        background-color: transparent;
+        color: white;
+        border: none;
+        text-align: left;
+        font-size: 1.1em;
+        cursor: pointer;
+        transition: background-color 0.1s;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .menu-option:hover {
+        background-color: #3b3b3b;
+    }
+    
+    .menu-option .material-icons {
+        font-size: 24px;
+    }
+    
+    /* --- カスタム通知モーダル (alert()の代替) --- */
+    .notification-modal {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background-color: #333;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 5px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s, visibility 0.3s;
+      z-index: 1000;
+    }
+
+    .notification-modal.show {
+      opacity: 1;
+      visibility: visible;
+    }
+    
+    /* --- Welcome Screen (ホーム画面) --- */
+    #welcome-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #f7f7f7; 
+      z-index: 998; 
+      display: flex; 
+      box-sizing: border-box;
+    }
+    
+    .left-pane {
+        width: 300px;
+        background-color: white;
+        padding: 20px;
+        box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .right-pane {
+        flex-grow: 1;
+        padding: 20px;
+        overflow-y: auto;
+    }
+
+    .left-pane h2, .right-pane h2 {
+        font-size: 1.8em;
+        font-weight: 300;
+        color: #333;
+        margin-top: 0;
+        margin-bottom: 30px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    /* 新規作成ボタン (Wordのテンプレート風) */
+    #new-memo-button {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 30px 15px;
+        background-color: var(--theme-color);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    
+    #new-memo-button:hover {
+        background-color: var(--theme-hover);
+    }
+
+    #new-memo-button .material-icons {
+        font-size: 4em;
+    }
+
+    #new-memo-button span:last-child {
+        font-weight: 600;
+        font-size: 1.2em;
+        margin-top: 10px;
+    }
+
+    /* 最近のファイルリスト (右ペイン) */
+    .recent-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .recent-item {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 15px 10px;
+        border-bottom: 1px solid #eee;
+        cursor: pointer;
+        transition: background-color 0.1s;
+        border-radius: 4px;
+        position: relative;
+    }
+
+    .recent-item:hover {
+        background-color: #e0e0e0;
+    }
+    
+    .recent-item .material-icons {
+        color: var(--theme-color);
+        font-size: 28px;
+    }
+
+    .recent-info {
+        flex-grow: 1;
+        text-align: left;
+    }
+
+    .recent-title {
+        font-weight: 600;
+        color: #333;
+        font-size: 1.1em;
+    }
+
+    .recent-date {
+        font-size: 0.85em;
+        color: #777;
+    }
+    
+    .recent-delete {
+        background: none;
+        border: none;
+        color: #999;
+        cursor: pointer;
+        padding: 5px;
+        border-radius: 4px;
+        visibility: hidden;
+        opacity: 0;
+        transition: opacity 0.2s, visibility 0.2s;
+    }
+    
+    .recent-item:hover .recent-delete {
+        visibility: visible;
+        opacity: 1;
+        color: #d32f2f;
+    }
+
+    /* Document View (リボンとエディタ全体) */
+    #document-view-container {
+        display: none;
+        height: 100%;
+        width: 100%;
+        flex-direction: column;
+    }
+
+    /* --- カスタムモーダルのスタイル --- */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.6); 
+        z-index: 1010;
+        display: none;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-content {
+        background-color: var(--modal-bg);
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+        max-width: 400px;
+        width: 90%;
+        text-align: center;
+    }
+
+    .modal-content h2 {
+        color: var(--theme-color);
+        margin-top: 0;
+        font-weight: 600;
+    }
+
+    .modal-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 20px;
+    }
+
+    .modal-actions button {
+        padding: 10px 15px;
+        font-size: 1em;
+        border: 2px solid var(--theme-color);
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.2s, color 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        background-color: white;
+        color: var(--theme-color);
+        font-weight: 500;
+    }
+
+    .modal-actions button:last-child {
+        background-color: #ccc;
+        color: #333;
+        border-color: #ccc;
+    }
+
+    .modal-actions button:hover:not(:last-child) {
+        background-color: var(--theme-color);
+        color: white;
+    }
+    .modal-actions button:last-child:hover {
+        background-color: #bbb;
+        border-color: #bbb;
+    }
+  </style>
+</head>
+<body>
+  
+  <div id="welcome-screen">
+    <div class="left-pane">
+        <h2>
+            <span class="material-icons" style="font-size: 2em; color: var(--theme-color);">edit_document</span>
+            新規
+        </h2>
+        <button id="new-memo-button" onclick="startNewMemoFromHome()">
+          <span class="material-icons">note_add</span>
+          <span>空白のドキュメント</span>
+        </button>
+        <p style="text-align: center; color: #999; font-size: 0.9em; margin-top: 10px;">
+            メモはブラウザに自動保存されます。
+        </p>
+    </div>
+    
+    <div class="right-pane">
+        <h2>
+            <span class="material-icons">schedule</span>
+            最近使用したファイル
+        </h2>
+        <ul id="recent-memo-list" class="recent-list">
+            </ul>
+    </div>
+  </div>
+
+  <div id="document-view-container">
+      
+      <div class="top-bar-container">
+        <button id="file-menu-button" class="file-button" onclick="toggleFileMenu()">ファイル</button>
+        
+        <div class="tab-bar">
+            <button class="tab-button active" onclick="switchTab(this, 'home')">ホーム</button>
+            <button class="tab-button" onclick="switchTab(this, 'insert')">挿入</button>
+            <button class="tab-button" onclick="switchTab(this, 'view')">表示</button>
+            <button class="tab-button" onclick="switchTab(this, 'draw')">描画</button>
+        </div>
+      </div>
+
+      <div class="ribbon-container">
+        <div id="home-tab" class="tab-panel active">
+            
+            <div class="ribbon-group">
+                <button onclick="document.execCommand('undo')" title="元に戻す (Ctrl+Z)"><span class="material-icons">undo</span></button>
+                <button onclick="document.execCommand('redo')" title="やり直し (Ctrl+Y)"><span class="material-icons">redo</span></button>
+                <span class="group-label">操作</span>
+            </div>
+            
+            <div class="ribbon-group">
+                <select id="font-selector" onchange="changeFontFamily(this.value)">
+                    <option value="Arial" class="font-arial">Arial (デフォルト)</option>
+                    <option value="'Hachi Maru Pop', cursive" class="font-hachi-maru-pop">はちまるポップ</option>
+                    <option value="'Potta One', cursive" class="font-potta-one">ポッタワン</option>
+                    <option value="'Klee One', cursive" class="font-klee-one">クレーワン</option>
+                    <option value="'Rampart One', cursive" class="font-rampart-one">ランパートワン</option>
+                    <option value="'Mochiy Pop P One', sans-serif" class="font-mochiy-pop-p-one">もちポップPワン</option>
+                </select>
+                
+                <input type="number" id="font-size-input" min="1" max="90" value="16" title="フォントサイズ (pt)" onchange="changeFontSize(this.value)">
+                
+                <select onchange="changeColor(this.value)">
+                    <option value="" selected disabled>色</option>
+                    <option value="black">黒</option>
+                    <option value="red">赤</option>
+                    <option value="blue">青</option>
+                    <option value="green">緑</option>
+                </select>
+                
+                <select id="highlight-selector" onchange="changeHighlightColor(this.value)" title="蛍光ペン">
+                    <option value="" selected disabled>💡</option>
+                    <option value="rgba(255, 255, 0, 0.5)" style="background-color: rgba(255, 255, 0, 0.5);">黄色 (半透明)</option>
+                    <option value="rgba(0, 255, 0, 0.5)" style="background-color: rgba(0, 255, 0, 0.5);">緑 (半透明)</option>
+                    <option value="rgba(0, 255, 255, 0.5)" style="background-color: rgba(0, 255, 255, 0.5);">水色 (半透明)</option>
+                    <option value="rgba(255, 192, 203, 0.5)" style="background-color: rgba(255, 192, 203, 0.5);">ピンク (半透明)</option>
+                    <option value="transparent">クリア</option>
+                </select>
+                
+                <button id="bold-btn" onclick="toggleFormat(this, 'bold')"><span class="material-icons">format_bold</span></button>
+                <button id="italic-btn" onclick="toggleFormat(this, 'italic')"><span class="material-icons">format_italic</span></button>
+                <button id="underline-btn" onclick="toggleFormat(this, 'underline')"><span class="material-icons">format_underline</span></button>
+                
+                <span class="group-label">フォントと文字装飾</span>
+            </div>
+
+            <div class="ribbon-group">
+                <button id="left-btn" onclick="toggleFormat(this, 'justifyLeft')"><span class="material-icons">format_align_left</span></button>
+                <button id="center-btn" onclick="toggleFormat(this, 'justifyCenter')"><span class="material-icons">format_align_center</span></button>
+                <button id="right-btn" onclick="toggleFormat(this, 'justifyRight')"><span class="material-icons">format_align_right</span></button>
+                
+                <button onclick="pasteAsPlainText(event)" title="書式なしで貼り付け (Ctrl+Shift+V推奨)"><span class="material-icons">format_clear</span></button>
+
+                <select onchange="changeLineHeight(this.value)">
+                    <option value="" selected disabled>行間</option>
+                    <option value="1.0">1.0</option>
+                    <option value="1.5">1.5</option>
+                    <option value="2.0">2.0</option>
+                </select>
+                <span class="group-label">段落</span>
+            </div>
+            <div class="ribbon-group">
+  <button onclick="checkSpelling()">
+    <span class="material-icons">spellcheck</span> スペルチェック
+  </button>
+</div>
+
+            <div class="ribbon-group">
+                <button id="ul-btn" onclick="toggleFormat(this, 'insertUnorderedList')"><span class="material-icons">format_list_bulleted</span></button>
+                <button id="ol-btn" onclick="toggleFormat(this, 'insertOrderedList')"><span class="material-icons">format_list_numbered</span></button>
+                <span class="group-label">リスト</span>
+            </div>
+
+        </div>
+
+        <div id="insert-tab" class="tab-panel" style="display:none;">
+            <div class="ribbon-group">
+                <button onclick="addTextBox()" title="自由に移動できるテキストボックスを追加">
+                    <span class="material-icons">text_fields</span>テキストボックス
+                </button>
+                
+                <button onclick="document.getElementById('file-input').click()" title="画像やドキュメントを挿入">
+                    <span class="material-icons">add_photo_alternate</span>画像/ファイル
+                </button>
+                <input type="file" id="file-input" accept="image/*,.txt,.docx" onchange="handleFile(event)" style="display:none;">
+                <span class="group-label">メディア</span>
+            </div>
+        </div>
+
+        <div id="view-tab" class="tab-panel" style="display:none;">
+            <div class="ribbon-group">
+                <select onchange="changeTheme(this.value)">
+                    <option value="blue">青</option>
+                    <option value="green">緑</option>
+                    <option value="orange">オレンジ</option>
+                    <option value="purple">紫</option>
+                    <option value="gray">グレー</option>
+                </select>
+                <span class="group-label">テーマ</span>
+            </div>
+            <div class="ribbon-group">
+                <button onclick="clearMemo()"><span class="material-icons">delete_sweep</span>クリア</button>
+                <span class="group-label">ドキュメント</span>
+            </div>
+        </div>
+        
+        <div id="draw-tab" class="tab-panel" style="display:none;">
+            <div class="ribbon-group">
+                
+                <button id="pen-tool-btn" onclick="activateDrawTool('pen')" title="ペン"><span class="material-icons">draw</span></button>
+                
+                <button id="eraser-tool-btn" onclick="activateDrawTool('eraser')" title="消しゴム"><span class="material-icons">cleaning_services</span></button>
+                
+                <button id="ruler-tool-btn" onclick="activateDrawTool('ruler')" title="定規（直線・45°スナップ）"><span class="material-icons">square_foot</span></button>
+
+                <span class="group-label">ツール</span>
+            </div>
+            
+            <div class="ribbon-group">
+                <select onchange="setDrawColor(this.value)" title="ペンの色">
+                    <option value="" selected disabled>色</option>
+                    <option value="black" style="color: black;">黒</option>
+                    <option value="red" style="color: red;">赤</option>
+                    <option value="blue" style="color: blue;">青</option>
+                    <option value="green" style="color: green;">緑</option>
+                </select>
+                
+                <select onchange="setDrawThickness(this.value)" title="線の太さ">
+                    <option value="" selected disabled>太さ</option>
+                    <option value="2">細 (2px)</option>
+                    <option value="5">中 (5px)</option>
+                    <option value="10">太 (10px)</option>
+                </select>
+                
+                <span class="group-label">ペンスタイル</span>
+            </div>
+        </div>
+        </div>
+      
+      <div class="document">
+        <div id="editor" contenteditable="true"></div>
+        <canvas id="drawing-canvas"></canvas>
+      </div>
+  </div>
+
+
+  <div id="file-menu-overlay" class="file-menu-overlay">
+      <div class="menu-options-pane">
+          
+          <button class="menu-option" onclick="returnToHome(true)">
+              <span class="material-icons">home</span>
+              <span>ホーム画面</span>
+          </button>
+          
+          <hr style="border-color: #555; margin: 10px 0;">
+          
+          <button class="menu-option" onclick="showExportDialog()">
+              <span class="material-icons">save_alt</span>
+              <span>エクスポート</span>
+          </button>
+          
+          <button class="menu-option" onclick="printDocument()">
+              <span class="material-icons">print</span>
+              <span>印刷 (PDF保存)</span>
+          </button>
+          <hr style="border-color: #555; margin: 10px 0;">
+          <button class="menu-option" onclick="toggleFileMenu()">
+              <span class="material-icons">arrow_back</span>
+              <span>リボンに戻る</span>
+          </button>
+      </div>
+      <div class="menu-detail-pane" onclick="toggleFileMenu()">
+          <h2 style="color: white; padding: 20px;">[ファイル] メニュー</h2>
+          <p style="color: #ccc; padding: 0 20px;">印刷やエクスポートなどのドキュメント操作はこちらから。</p>
+      </div>
+  </div>
+  
+  <div id="export-modal" class="modal-overlay">
+    <div class="modal-content">
+        <h2>エクスポート形式の選択</h2>
+        <p>ドキュメントをどの形式でダウンロードしますか？</p>
+        <div class="modal-actions">
+            <button onclick="exportAsImage()">
+                <span class="material-icons">image</span> PNG/JPEG画像出力
+            </button>
+            <button onclick="exportAsTxt()">
+                <span class="material-icons">description</span> TXT形式 (プレーンテキスト)
+            </button>
+            <button onclick="exportAsDocx()">
+                <span class="material-icons">article</span> DOCX形式 (リッチテキスト)
+            </button>
+            <button onclick="closeModal('export-modal')">キャンセル</button>
+        </div>
+    </div>
+  </div>
+
+  <div id="notification-modal" class="notification-modal">メッセージ</div>
+  
+  <ul id="custom-context-menu">
+      <li onclick="handlePinAction()"><span class="material-icons">push_pin</span><span id="pin-action-text">ピン留めする</span></li>
+      <li class="color-option">
+          <span class="material-icons">border_color</span>枠線の色
+          <ul class="submenu">
+            <li class="submenu-color-option" onclick="handleBorderColorAction('black')"><span class="color-swatch" style="background-color: black;"></span>黒</li>
+            <li class="submenu-color-option" onclick="handleBorderColorAction('red')"><span class="color-swatch" style="background-color: red;"></span>赤</li>
+            <li class="submenu-color-option" onclick="handleBorderColorAction('blue')"><span class="color-swatch" style="background-color: blue;"></span>青</li>
+            <li class="submenu-color-option" onclick="handleBorderColorAction('green')"><span class="color-swatch" style="background-color: green;"></span>緑</li>
+            <li class="submenu-color-option" onclick="handleBorderColorAction('transparent')"><span class="color-swatch" style="background-color: transparent; border: 1px dashed #ccc;"></span>透明</li>
+          </ul>
+      </li>
+      <li onclick="deleteElement()"><span class="material-icons">delete</span>削除</li>
+  </ul>
+
+  <script>
+    const editor = document.getElementById('editor');
+    const documentContainer = document.querySelector('.document'); 
+    const contextMenu = document.getElementById('custom-context-menu'); 
+    const MEMO_LIST_KEY = 'wordMemoList';
+    const CURRENT_MEMO_ID_KEY = 'wordCurrentMemoId';
+    
+    let memos = []; 
+    let currentMemoId = null; 
+    let autoSaveInterval = null; 
+    
+    // 🎨 描画機能関連の変数 🎨
+    const canvas = document.getElementById('drawing-canvas');
+    const ctx = canvas.getContext('2d');
+    let currentDrawTool = null;
+    let currentDrawColor = 'black';
+    let currentDrawThickness = 2; 
+    let isDrawing = false; 
+    let lastX = 0; 
+    let lastY = 0; 
+    let isRulerMode = false; 
+    let startX = 0; 
+    let startY = 0; 
+    let savedCanvasImage = null; 
+
+    // ⭐ ドラッグ機能関連の変数 ⭐
+    let activeElement = null; 
+    let initialX;
+    let initialY;
+    let xOffset = 0;
+    let yOffset = 0;
+    let isDragging = false; 
+    let contextTarget = null; // 右クリックされた要素
+
+    /**
+     * UUIDを生成する
+     * @returns {string} UUID
+     */
+    function generateUUID() {
+      // シンプルなUUID生成 
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+    
+    /**
+     * カスタム通知モーダルを表示する (alertの代替)
+     * @param {string} message - 表示するメッセージ
+     */
+    function showNotification(message) {
+      const modal = document.getElementById('notification-modal');
+      modal.innerText = message;
+      modal.classList.add('show');
+      setTimeout(() => {
+        modal.classList.remove('show');
+      }, 3000);
+    }
+    
+    /**
+     * 画面を切り替える
+     * @param {string} screenId - 'welcome' または 'document'
+     */
+    function showScreen(screenId) {
+        const welcomeScreen = document.getElementById('welcome-screen');
+        const documentView = document.getElementById('document-view-container');
+        
+        // 自動保存を制御
+        if (screenId === 'document') {
+            documentView.style.display = 'flex';
+            welcomeScreen.style.display = 'none';
+            // ドキュメントビューに入ったら自動保存を開始
+            if (!autoSaveInterval) {
+                autoSaveInterval = setInterval(saveCurrentMemo, 5000); 
+            }
+            // 新規追加: ドキュメントビューに入ったらキャンバスをリサイズ
+            setTimeout(resizeCanvas, 50); 
+        } else {
+            welcomeScreen.style.display = 'flex';
+            documentView.style.display = 'none';
+            // ホーム画面に入ったら自動保存を停止
+            if (autoSaveInterval) {
+                clearInterval(autoSaveInterval);
+                autoSaveInterval = null;
+            }
+            // ホーム画面表示時はリストを再描画
+            renderRecentMemoList();
+        }
+    }
+
+    // --- モーダル制御機能 ---
+    
+    /**
+     * 指定されたIDのモーダルを表示する
+     * @param {string} modalId - モーダルのDOM ID
+     */
+    function openModal(modalId) {
+        document.getElementById(modalId).style.display = 'flex';
+    }
+
+    /**
+     * 指定されたIDのモーダルを閉じる
+     * @param {string} modalId - モーダルのDOM ID
+     */
+    function closeModal(modalId) {
+        document.getElementById(modalId).style.display = 'none';
+    }
+
+    // --- メモ管理機能 ---
+    
+    /**
+     * メモリストをLocal Storageから読み込む
+     */
+    function loadMemosFromStorage() {
+      const savedMemos = localStorage.getItem(MEMO_LIST_KEY);
+      memos = savedMemos ? JSON.parse(savedMemos) : [];
+      
+      // ソート: 最終更新日時が新しい順
+      memos.sort((a, b) => new Date(b.lastUpdated) - new Date(a.lastUpdated));
+      
+      const savedId = localStorage.getItem(CURRENT_MEMO_ID_KEY);
+      currentMemoId = savedId;
+      
+      // 起動時は必ずホーム画面を表示
+      showScreen('welcome'); 
+    }
+
+    /**
+     * 現在のメモの内容をmemos配列とLocal Storageに保存する
+     */
+    function saveCurrentMemo() {
+        if (document.getElementById('document-view-container').style.display === 'none') return;
+        
+        // Canvasの内容を画像化
+        const canvasContent = isCanvasEmpty() ? '' : canvas.toDataURL('image/png');
+        
+        // draggable-element (テキストボックスと画像) の内容を保存
+        const draggableElementsData = [];
+        documentContainer.querySelectorAll('.draggable-element').forEach(el => {
+             const isTextBox = el.classList.contains('draggable-textbox');
+             const data = {
+                 id: el.getAttribute('data-id') || generateUUID(),
+                 type: isTextBox ? 'textbox' : 'image',
+                 html: isTextBox ? el.innerHTML : '',
+                 src: !isTextBox ? el.querySelector('img').src : '',
+                 left: el.style.left,
+                 top: el.style.top,
+                 width: el.style.width,
+                 height: el.style.height,
+                 pinned: el.classList.contains('pinned'),
+                 // ⭐ 新規追加: 枠線色を保存 ⭐
+                 borderColor: el.style.borderColor || '' 
+             };
+             el.setAttribute('data-id', data.id); // IDを要素に確定させる
+             draggableElementsData.push(data);
+        });
+
+        // エディタのHTMLとキャンバスの画像データを統合
+        const content = editor.innerHTML;
+        const fullContent = {
+             html: content,
+             draw: canvasContent,
+             draggable: draggableElementsData 
+        };
+        
+        // 内容が完全に空 (何も入力されていない) の場合は保存しない
+        if (!content && !canvasContent && draggableElementsData.length === 0) {
+            return;
+        }
+        
+        // 最初の数文字をタイトルとして抽出
+        let title = content.replace(/<[^>]*>/g, '').substring(0, 30).trim();
+        if (title.length === 0 && draggableElementsData.length > 0) {
+            title = draggableElementsData.length > 1 ? `メモ (${draggableElementsData.length}要素)` : `メモ (${draggableElementsData[0].type})`;
+        } else if (title.length === 0) {
+             title = '無題のメモ';
+        }
+        
+        const now = new Date().toISOString();
+
+        const newMemoData = {
+            id: currentMemoId || generateUUID(),
+            title: title,
+            content: fullContent, // オブジェクトとして保存
+            lastUpdated: now
+        };
+        
+        currentMemoId = newMemoData.id; // IDを確定
+
+        const index = memos.findIndex(m => m.id === currentMemoId);
+        if (index > -1) {
+            memos[index] = newMemoData; // 更新
+        } else {
+            memos.unshift(newMemoData); // 新規追加（一番上に追加）
+        }
+
+        // リストを更新日時でソートし直す
+        memos.sort((a, b) => new Date(b.lastUpdated) - new Date(a.lastUpdated));
+
+        // Local Storageを更新
+        localStorage.setItem(MEMO_LIST_KEY, JSON.stringify(memos));
+        localStorage.setItem(CURRENT_MEMO_ID_KEY, currentMemoId);
+    }
+    
+    /**
+     * 選択したメモをエディタに読み込む
+     * @param {string} id - 読み込むメモのID
+     */
+    function loadMemo(id) {
+        saveCurrentMemo(); // 開く前に現在のメモを保存
+        const memoToLoad = memos.find(m => m.id === id);
+        if (memoToLoad) {
+            // エディタHTMLコンテンツ
+            editor.innerHTML = memoToLoad.content.html || memoToLoad.content; // 旧形式にも対応
+            
+            // 既存のdraggable-elementをクリア
+            documentContainer.querySelectorAll('.draggable-element').forEach(el => el.remove());
+
+            // 描画コンテンツを復元
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const drawData = memoToLoad.content.draw;
+            if (drawData) {
+                 const img = new Image();
+                 img.onload = function() {
+                      // 描画内容をキャンバスに反映
+                      ctx.drawImage(img, 0, 0, canvas.width, canvas.height); 
+                 };
+                 img.src = drawData;
+            }
+            
+            // Draggable Elementを復元
+            const draggableData = memoToLoad.content.draggable || [];
+            draggableData.forEach(data => {
+                let el;
+                if (data.type === 'textbox') {
+                    el = createTextBoxElement(data);
+                    el.innerHTML = data.html;
+                } else if (data.type === 'image') {
+                    el = createImageElement(data);
+                }
+                
+                if (el) {
+                    el.style.left = data.left;
+                    el.style.top = data.top;
+                    el.style.width = data.width;
+                    el.style.height = data.height;
+                    el.style.borderColor = data.borderColor; // ⭐ 枠線色を復元 ⭐
+                    el.setAttribute('data-id', data.id);
+                    if (data.pinned) {
+                        el.classList.add('pinned');
+                        el.style.cursor = 'default';
+                    }
+                    documentContainer.appendChild(el);
+                }
+            });
+
+            currentMemoId = id;
+            localStorage.setItem(CURRENT_MEMO_ID_KEY, currentMemoId);
+            showScreen('document'); // ドキュメント画面に切り替え
+            showNotification(`「${memoToLoad.title}」を開きました`);
+            // 開いたメモの内容に基づいてボタンの状態を更新
+            setTimeout(updateButtonStates, 100); 
+            
+            // 描画ツールのアクティブ状態をリセット
+            currentDrawTool = null;
+            document.querySelectorAll('#draw-tab button').forEach(btn => btn.classList.remove('active'));
+            canvas.style.pointerEvents = 'none'; // テキスト編集に戻す
+            ctx.globalCompositeOperation = 'source-over'; 
+        }
+    }
+    
+    /**
+     * テキストボックス要素を作成するヘルパー
+     */
+    function createTextBoxElement(data) {
+        const box = document.createElement('div');
+        box.className = 'draggable-element draggable-textbox';
+        box.setAttribute('contenteditable', 'true');
+        box.textContent = data && data.html ? '' : '自由に移動できるテキスト';
+        box.oncontextmenu = (e) => showContextMenu(e, box);
+        return box;
+    }
+    
+    /**
+     * 画像要素を作成するヘルパー
+     */
+    function createImageElement(data) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'draggable-element';
+        // 初期サイズを設定 (リサイズ可能)
+        wrapper.style.width = data && data.width ? data.width : '200px'; 
+        wrapper.style.height = data && data.height ? data.height : '150px'; 
+        
+        const img = document.createElement('img');
+        img.src = data.src;
+        wrapper.appendChild(img);
+        wrapper.oncontextmenu = (e) => showContextMenu(e, wrapper);
+        return wrapper;
+    }
+    
+    // --- 既存の機能の維持と修正 ---
+    
+    // handleFileの画像をeditorではなくdocumentContainerに追加するように修正
+    function handleFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          // 画像をdraggable-elementとしてdocumentContainer直下に追加
+          const wrapper = createImageElement({ src: e.target.result });
+          
+          // 初期位置をランダムに設定（重なりを防ぐため）
+          const docRect = documentContainer.getBoundingClientRect();
+          wrapper.style.left = (Math.random() * (docRect.width - 250) + 20) + 'px';
+          wrapper.style.top = (Math.random() * (docRect.height - 250) + 20) + 'px';
+          
+          documentContainer.appendChild(wrapper);
+          showNotification('🖼️ 自由にドラッグできる画像を挿入しました');
+        };
+        reader.readAsDataURL(file);
+      } else if (file.name.endsWith('.txt')) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          editor.innerText += '\n' + e.target.result;
+          showNotification('.txtファイルを挿入しました');
+        };
+        reader.readAsText(file);
+      } else if (file.name.endsWith('.docx')) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const arrayBuffer = e.target.result;
+          mammoth.convertToHtml({ arrayBuffer: arrayBuffer })
+            .then(result => {
+              editor.innerHTML += result.value;
+              showNotification('.docxファイルの内容を挿入しました');
+            })
+            .catch(err => {
+              showNotification('Wordファイルの読み込みに失敗しました');
+              console.error(err);
+            });
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
+        showNotification('対応しているのは画像、.txt、.docx ファイルです');
+      }
+      event.target.value = '';
+    }
+
+    // --- ⭐ Draggable Element Logic ⭐ ---
+    
+    // ドラッグを初期化するリスナー (documentContainer全体に追加)
+    documentContainer.addEventListener('mousedown', dragStart);
+    documentContainer.addEventListener('mouseup', dragEnd);
+    documentContainer.addEventListener('mousemove', drag);
+    documentContainer.addEventListener('mouseleave', dragEnd); // コンテナ外に出た時も終了
+
+    /**
+     * ドラッグ開始
+     */
+    function dragStart(e) {
+        // コンテキストメニューが表示されていたら閉じる
+        contextMenu.style.display = 'none';
+
+        // ドラッグ対象は .draggable-element クラスを持つ要素に限定
+        // ただし、ピン留めされていないもののみ
+        let targetElement = e.target.closest('.draggable-element');
+        
+        if (targetElement && !targetElement.classList.contains('pinned')) {
+            
+            // リサイズハンドルがクリックされた場合はドラッグしない
+            const style = window.getComputedStyle(targetElement);
+            // リサイズハンドルの座標を厳密に判定するのは困難なため、ここでは簡易的なロジックで対応
+            const rect = targetElement.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            
+            // 右下隅付近（リサイズハンドル領域）であればドラッグしない
+            const resizeHandleSize = 20; 
+            if (clickX > rect.width - resizeHandleSize && clickY > rect.height - resizeHandleSize) {
+                 return; 
+            }
+            
+            // テキストボックス内のテキスト選択・編集を妨げないためのチェック
+            const isTextBox = targetElement.classList.contains('draggable-textbox');
+            let shouldStartDrag = true;
+            
+            if (isTextBox) {
+                // e.targetがテキストボックスのパディング領域（端）ならドラッグ開始
+                // 簡易的なパディング領域チェック (パディングの8px外側をドラッグハンドルと見なす)
+                if (clickX > 8 && clickX < rect.width - 8 && clickY > 8 && clickY < rect.height - 8) {
+                    // テキスト領域内のクリックと見なす
+                    shouldStartDrag = false;
+                }
+            }
+
+            if (shouldStartDrag) {
+                e.preventDefault();
+                activeElement = targetElement;
+                isDragging = true;
+                
+                // documentContainerからの相対座標を取得
+                const rect = documentContainer.getBoundingClientRect();
+                const elRect = activeElement.getBoundingClientRect();
+                
+                // マウス位置から要素の左上端までのオフセットを計算
+                xOffset = e.clientX - elRect.left;
+                yOffset = e.clientY - elRect.top;
+                
+                activeElement.style.cursor = 'grabbing';
+            }
+        }
+    }
+
+    /**
+     * ドラッグ中
+     */
+    function drag(e) {
+        if (!isDragging || !activeElement) return;
+        
+        // documentContainerからの相対位置を計算
+        const rect = documentContainer.getBoundingClientRect();
+        let newLeft = e.clientX - rect.left - xOffset;
+        let newTop = e.clientY - rect.top - yOffset;
+        
+        // 境界チェック (コンテナからはみ出さないように)
+        const activeRect = activeElement.getBoundingClientRect();
+        
+        // 左端のクリップ
+        if (newLeft < 0) newLeft = 0;
+        // 上端のクリップ
+        if (newTop < 0) newTop = 0;
+        // 右端のクリップ (要素の幅も考慮)
+        // 注意: activeRect.width はドラッグ中のサイズ変化を反映しない場合があるが、ここでは簡易化
+        if (newLeft + activeElement.offsetWidth > rect.width) newLeft = rect.width - activeElement.offsetWidth;
+        // 下端のクリップ (要素の高さも考慮)
+        if (newTop + activeElement.offsetHeight > rect.height) newTop = rect.height - activeElement.offsetHeight;
+        
+        activeElement.style.left = newLeft + 'px';
+        activeElement.style.top = newTop + 'px';
+    }
+
+    /**
+     * ドラッグ終了
+     */
+    function dragEnd(e) {
+        if (isDragging) {
+            isDragging = false;
+            if (activeElement) {
+                activeElement.style.cursor = activeElement.classList.contains('pinned') ? 'default' : 'grab';
+                activeElement = null;
+                saveCurrentMemo(); // ドラッグが終了したら保存
+            }
+        }
+    }
+    
+    /**
+     * テキストボックスをドキュメントに追加する
+     */
+    function addTextBox() {
+        // 描画モードを終了
+        if (currentDrawTool) {
+            switchTab(document.querySelector('.tab-button[onclick*="\'home\'"]'), 'home');
+        }
+        
+        const box = createTextBoxElement();
+        
+        // 初期位置をドキュメントの中央に設定
+        const docRect = documentContainer.getBoundingClientRect();
+        box.style.width = '150px';
+        box.style.height = '50px';
+        box.style.left = (docRect.width / 2 - 75) + 'px'; 
+        box.style.top = (docRect.height / 2 - 25) + 'px';
+        
+        documentContainer.appendChild(box);
+        box.focus();
+        showNotification('🔠 自由にドラッグできるテキストボックスを追加しました');
+    }
+
+    // --- ⭐ Context Menu Logic ⭐ ---
+    
+    // documentクリックでメニューを閉じる
+    document.addEventListener('click', (e) => {
+        if (!contextMenu.contains(e.target)) {
+            contextMenu.style.display = 'none';
+            contextTarget = null;
+        }
+    });
+    
+    // documentの右クリックイベントでメニューを閉じる（要素が捕まえなかった場合）
+    document.addEventListener('contextmenu', (e) => {
+        // コンテキストメニュー自体がクリックされた場合は閉じない
+        if (contextMenu.style.display !== 'none' && !e.target.closest('#custom-context-menu')) {
+            contextMenu.style.display = 'none';
+        }
+    });
+
+
+    /**
+     * カスタムコンテキストメニューを表示
+     * @param {Event} e - event
+     * @param {HTMLElement} target - 右クリックされた draggable-element
+     */
+    function showContextMenu(e, target) {
+        e.preventDefault();
+        e.stopPropagation(); // documentのcontextmenuイベントが発火するのを防ぐ
+        
+        contextTarget = target;
+        
+        // ピン留め状態に応じてメニューテキストを更新
+        const isPinned = target.classList.contains('pinned');
+        document.getElementById('pin-action-text').textContent = isPinned ? 'ピン留めを解除' : 'ピン留めする';
+
+        // メニューの位置を設定
+        contextMenu.style.left = e.clientX + 'px';
+        contextMenu.style.top = e.clientY + 'px';
+        contextMenu.style.display = 'block';
+    }
+
+    /**
+     * ピン留めアクションを実行
+     */
+    function handlePinAction() {
+        if (!contextTarget) return;
+
+        const isPinned = contextTarget.classList.toggle('pinned');
+        contextTarget.style.cursor = isPinned ? 'default' : 'grab'; // カーソルを更新
+        
+        showNotification(isPinned ? '📌 要素をピン留めしました' : '要素のピン留めを解除しました');
+        contextMenu.style.display = 'none';
+        contextTarget = null;
+        saveCurrentMemo(); // 状態変更を保存
+    }
+    
+    /**
+     * ⭐ 新規追加: 枠線の色を変更するアクションを実行 ⭐
+     * @param {string} color - 適用するCSSカラー値 ('red', 'black', 'transparent'など)
+     */
+    function handleBorderColorAction(color) {
+        if (!contextTarget) return;
+
+        contextTarget.style.borderStyle = 'solid'; // 必ず実線にする
+        if (color === 'transparent') {
+            contextTarget.style.borderColor = color;
+            contextTarget.style.borderWidth = '1px'; // 透明でも幅を維持
+            showNotification('枠線を透明にしました');
+        } else {
+            contextTarget.style.borderColor = color;
+            contextTarget.style.borderWidth = '1px';
+            showNotification(`枠線を${color}に変更しました`);
+        }
+
+        contextMenu.style.display = 'none';
+        contextTarget = null;
+        saveCurrentMemo(); // 状態変更を保存
+    }
+
+
+    /**
+     * 要素を削除
+     */
+    function deleteElement() {
+        if (contextTarget) {
+            contextTarget.remove();
+            showNotification('要素を削除しました');
+            contextMenu.style.display = 'none';
+            contextTarget = null;
+            saveCurrentMemo(); // 状態変更を保存
+        }
+    }
+    
+    // --- 既存のコードの残りの部分 (メモ管理など) ---
+    
+    function startNewMemoFromHome() { newMemo(true); }
+    function deleteMemo(id) { /* ... */ }
+    function renderRecentMemoList() { 
+        const listElement = document.getElementById('recent-memo-list');
+        listElement.innerHTML = ''; 
+
+        if (memos.length === 0) {
+            listElement.innerHTML = '<li style="padding: 15px; color: #777;">まだ保存されたメモがありません。</li>';
+            return;
+        }
+
+        memos.forEach(memo => {
+            const li = document.createElement('li');
+            li.className = 'recent-item';
+            
+            const icon = document.createElement('span');
+            icon.className = 'material-icons';
+            icon.textContent = 'description'; 
+
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'recent-info';
+            infoDiv.onclick = () => loadMemo(memo.id); 
+            
+            const titleSpan = document.createElement('div');
+            titleSpan.className = 'recent-title';
+            titleSpan.textContent = memo.title;
+            
+            const dateSpan = document.createElement('div');
+            dateSpan.className = 'recent-date';
+            dateSpan.textContent = new Date(memo.lastUpdated).toLocaleString('ja-JP');
+            
+            infoDiv.appendChild(titleSpan);
+            infoDiv.appendChild(dateSpan);
+            
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'recent-delete';
+            deleteButton.innerHTML = '<span class="material-icons" style="font-size: 18px;">delete</span>';
+            deleteButton.title = '削除';
+            deleteButton.onclick = (e) => {
+                e.stopPropagation(); 
+                deleteMemo(memo.id);
+            };
+
+            li.appendChild(icon);
+            li.appendChild(infoDiv);
+            li.appendChild(deleteButton);
+            listElement.appendChild(li);
+        });
+    }
+
+    function getMemoFileName() {
+        const content = editor.innerHTML;
+        let title = content.replace(/<[^>]*>/g, '').substring(0, 30).trim();
+        if (title.length === 0) {
+            title = '無題のメモ';
+        }
+        return title.replace(/[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\s]/g, '').trim() || 'document';
+    }
+
+    function showExportDialog() {
+        toggleFileMenu(); 
+        saveCurrentMemo();
+        openModal('export-modal');
+    }
+
+    function downloadFile(filename, content, type) {
+        const blob = new Blob([content], { type: type });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+    }
+
+    function exportAsTxt() {
+        closeModal('export-modal');
+        const filename = getMemoFileName() + '.txt';
+        const content = editor.innerText; 
+        downloadFile(filename, content, 'text/plain');
+        showNotification(`「${filename}」をTXT形式でエクスポートしました`);
+    }
+
+    function exportAsDocx() {
+        closeModal('export-modal');
+        const filename = getMemoFileName() + '.docx';
+        
+        const htmlContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>${getMemoFileName()}</title>
+                <style>
+                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; padding: 20px; }
+                </style>
+            </head>
+            <body>
+                ${editor.innerHTML}
+            </body>
+            </html>
+        `;
+        
+        downloadFile(filename, htmlContent, 'application/msword');
+        showNotification(`「${filename}」をDOCX形式（リッチテキスト）でエクスポートしました`);
+    }
+    
+    /**
+     * ⭐ 新規追加: 画像出力機能 (ピン留め/リサイズハンドル非表示) ⭐
+     */
+    function exportAsImage() {
+        closeModal('export-modal');
+        saveCurrentMemo(); 
+
+        // 1. 画像出力用のCSSクラスを一時的に適用
+        documentContainer.classList.add('export-mode');
+
+        showNotification('📸 画像出力モード: 赤い枠線とリサイズハンドルを非表示にしました。ブラウザやOSのスクリーンショット機能でキャプチャしてください！');
+        
+        // 2. 5秒後にクラスを削除して元に戻す
+        setTimeout(() => {
+            documentContainer.classList.remove('export-mode');
+            showNotification('画像出力モードを終了しました。');
+        }, 5000); 
+    }
+
+
+    function isCanvasEmpty() {
+        // キャンバスのピクセルデータをチェックして、完全に透明かどうかを判断
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        for (let i = 0; i < data.length; i += 4) {
+            // アルファ値が0より大きければ描画されている
+            if (data[i + 3] > 0) return false; 
+        }
+        return true;
+    }
+
+    function toggleFileMenu() {
+        const overlay = document.getElementById('file-menu-overlay');
+        const fileButton = document.getElementById('file-menu-button');
+        const isOpen = overlay.classList.contains('open');
+
+        if (!isOpen) {
+            overlay.style.display = 'flex';
+            setTimeout(() => {
+                overlay.classList.add('open');
+                fileButton.classList.add('active');
+            }, 10);
+        } else {
+            overlay.classList.remove('open');
+            fileButton.classList.remove('active');
+
+            setTimeout(() => {
+                if (!overlay.classList.contains('open')) {
+                    overlay.style.display = 'none';
+                }
+            }, 300); 
+        }
+    }
+
+    function returnToHome(fromMenu = false) {
+        saveCurrentMemo(); 
+        if(fromMenu) {
+            toggleFileMenu(); 
+        }
+        showScreen('welcome'); 
+        showNotification('ホーム画面に戻りました');
+    }
+
+    function printDocument() {
+        toggleFileMenu(); 
+        saveCurrentMemo(); 
+        window.print();
+        showNotification('ブラウザの印刷ダイアログからPDFとして保存できます。');
+    }
+
+    function switchTab(activeTabButton, tabName) { 
+        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+        activeTabButton.classList.add('active');
+        document.querySelectorAll('.tab-panel').forEach(panel => panel.style.display = 'none');
+        document.getElementById(`${tabName}-tab`).style.display = 'flex';
+        
+        if (tabName === 'draw') {
+             canvas.style.pointerEvents = 'auto'; 
+             if (!currentDrawTool) {
+                 activateDrawTool('pen'); 
+             } else {
+                 document.getElementById(`${currentDrawTool}-tool-btn`)?.classList.add('active');
+                 showNotification('描画タブを開きました。');
+             }
+        } else {
+             canvas.style.pointerEvents = 'none'; 
+             document.querySelectorAll('#draw-tab button').forEach(btn => btn.classList.remove('active'));
+             ctx.globalCompositeOperation = 'source-over';
+        }
+        
+        updateButtonStates();
+    }
+    
+    // ページロード時の初期化
+    window.onload = () => {
+      loadMemosFromStorage(); 
+      const activeTab = document.querySelector('.tab-button.active');
+      if(activeTab) activeTab.click();
+      updateButtonStates();
+      resizeCanvas(); 
+    };
+
+    function clearMemo() {
+      if (confirm('現在のメモの内容を本当にクリアしますか？（メモはリストに残ります）')) {
+          editor.innerHTML = '';
+          document.getElementById('font-size-input').value = '16';
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          documentContainer.querySelectorAll('.draggable-element').forEach(el => el.remove());
+          showNotification('現在のメモの内容と描画内容をクリアしました');
+      }
+    }
+    
+    function changeFontFamily(fontFamily) { 
+        if (!fontFamily) return;
+        try {
+            document.execCommand('styleWithCSS', false, true);
+            document.execCommand('fontName', false, fontFamily);
+            document.execCommand('styleWithCSS', false, false);
+            showNotification(`${fontFamily}を適用しました`);
+        } catch (e) {
+            showNotification('フォントの変更に失敗しました。選択範囲を確認してください。');
+        }
+    }
+    
+    function changeFontSize(size) {
+        const pt = parseInt(size);
+        if (pt >= 1 && pt <= 90) {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const span = document.createElement('span');
+                span.style.fontSize = pt + 'pt';
+                span.style.lineHeight = 'normal'; 
+                
+                try {
+                    range.surroundContents(span);
+                    showNotification(`${pt}ptを適用しました`);
+                } catch (e) {
+                    showNotification('フォントサイズ設定に失敗しました。単一の段落を選択してください。');
+                }
+            } else {
+                 showNotification('文字を選択してください。');
+            }
+        }
+    }
+    
+    function changeHighlightColor(color) {
+        if (!color) return;
+        if (color === 'transparent') {
+             document.execCommand('hiliteColor', false, 'white');
+             showNotification('蛍光ペンをクリアしました');
+        } else {
+             document.execCommand('hiliteColor', false, color);
+             showNotification(`蛍光ペンを${color}に変更しました`);
+        }
+        document.getElementById('highlight-selector').value = '';
+    }
+    
+    function pasteAsPlainText(event) {
+        showNotification('貼り付けたい内容をコピーした後、エディタ内で **Ctrl+Shift+V** (Mac: **Cmd+Shift+V**) を押してください。');
+    }
+
+    function changeColor(color) {
+      if (color) document.execCommand('foreColor', false, color);
+      document.querySelector('.ribbon-group select:nth-of-type(2)').value = ''; 
+    }
+    
+    function changeLineHeight(height) {
+      if (height) {
+        const selection = window.getSelection();
+        if (selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0);
+          const blockParent = range.commonAncestorContainer.parentElement.closest('div, p, li');
+          
+          if (blockParent && blockParent.id !== 'editor') {
+              blockParent.style.lineHeight = height;
+          } else {
+              const span = document.createElement('span');
+              span.style.lineHeight = height;
+              try {
+                 range.surroundContents(span);
+              } catch(e) {
+                 showNotification('行間の変更は、単一の段落を選択してください');
+              }
+          }
+        }
+      }
+      document.querySelector('.ribbon-group select:nth-of-type(3)').value = ''; 
+    }
+    
+    function changeTheme(theme) {
+      const root = document.documentElement;
+      let color, hoverColor;
+      switch (theme) {
+        case 'blue': color = '#0078d4'; hoverColor = '#005a9e'; break;
+        case 'green': color = '#4caf50'; hoverColor = '#388e3c'; break;
+        case 'orange': color = '#ff9800'; hoverColor = '#f57c00'; break;
+        case 'purple': color = '#9c27b0'; hoverColor = '#7b1fa2'; break;
+        case 'gray': color = '#607d8b'; hoverColor = '#455a64'; break;
+      }
+      root.style.setProperty('--theme-color', color);
+      root.style.setProperty('--theme-hover', hoverColor);
+      showNotification(`テーマを${theme}に変更しました`);
+    }
+
+    function toggleFormat(button, command) {
+        document.execCommand(command, false, null);
+        button.classList.toggle('active', document.queryCommandState(command)); 
+    }
+
+    function updateButtonStates() {
+        document.getElementById('bold-btn')?.classList.toggle('active', document.queryCommandState('bold'));
+        document.getElementById('italic-btn')?.classList.toggle('active', document.queryCommandState('italic'));
+        document.getElementById('underline-btn')?.classList.toggle('active', document.queryCommandState('underline'));
+        
+        document.getElementById('ul-btn')?.classList.toggle('active', document.queryCommandState('insertUnorderedList'));
+        document.getElementById('ol-btn')?.classList.toggle('active', document.queryCommandState('insertOrderedList'));
+        
+        document.getElementById('left-btn')?.classList.toggle('active', document.queryCommandState('justifyLeft'));
+        document.getElementById('center-btn')?.classList.toggle('active', document.queryCommandState('justifyCenter'));
+        document.getElementById('right-btn')?.classList.toggle('active', document.queryCommandState('justifyRight'));
+    }
+
+    editor.addEventListener('mouseup', updateButtonStates); 
+    editor.addEventListener('keyup', updateButtonStates);  
+    
+    // --- 🎨 描画ツールの機能 (ペン、消しゴム、定規) ---
+    
+    function resizeCanvas() {
+        const editorRect = editor.getBoundingClientRect();
+        canvas.width = editorRect.width;
+        canvas.height = editorRect.height;
+        canvas.style.top = `${editor.offsetTop}px`;
+        canvas.style.left = `${editor.offsetLeft}px`;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        
+        // 再描画
+        const currentMemo = memos.find(m => m.id === currentMemoId);
+        if (currentMemo && currentMemo.content.draw) {
+             const img = new Image();
+             img.onload = function() {
+                  ctx.drawImage(img, 0, 0, canvas.width, canvas.height); 
+             };
+             img.src = currentMemo.content.draw;
+        }
+    }
+    window.addEventListener('resize', resizeCanvas);
+    
+    function getSnappedCoordinates(startX, startY, endX, endY) {
+        const dx = endX - startX;
+        const dy = endY - startY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx); // ラジアン
+        const angleDeg = angle * 180 / Math.PI;
+
+        let snappedAngle = angle;
+        
+        // 45度スナップ
+        const snapIncrement = 45;
+        const snappedDeg = Math.round(angleDeg / snapIncrement) * snapIncrement;
+        snappedAngle = snappedDeg * Math.PI / 180;
+
+        return {
+            x: startX + dist * Math.cos(snappedAngle),
+            y: startY + dist * Math.sin(snappedAngle)
+        };
+    }
+    
+    function activateDrawTool(toolName) {
+        currentDrawTool = toolName;
+        document.querySelectorAll('#draw-tab button').forEach(btn => btn.classList.remove('active'));
+        document.getElementById(`${toolName}-tool-btn`).classList.add('active');
+        
+        isRulerMode = (toolName === 'ruler');
+        if (toolName === 'eraser') {
+            ctx.globalCompositeOperation = 'destination-out'; // 消しゴムモード
+            canvas.style.cursor = 'crosshair';
+        } else {
+            ctx.globalCompositeOperation = 'source-over'; // ペンモード
+            canvas.style.cursor = isRulerMode ? 'crosshair' : 'crosshair';
+        }
+        showNotification(`${toolName === 'eraser' ? '消しゴム' : isRulerMode ? '定規' : 'ペン'} ツールを有効にしました`);
+    }
+
+    function startDrawing(e) {
+        if (!currentDrawTool) return;
+        isDrawing = true;
+        
+        const rect = canvas.getBoundingClientRect();
+        lastX = e.clientX - rect.left;
+        lastY = e.clientY - rect.top;
+
+        if (isRulerMode) {
+             startX = lastX;
+             startY = lastY;
+             // 定規モード開始時に現在のキャンバスの状態を保存 (プレビュー用)
+             savedCanvasImage = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        } else {
+            // ペン/消しゴムの場合はすぐに描き始める
+            ctx.strokeStyle = currentDrawTool === 'eraser' ? 'rgba(0,0,0,1)' : currentDrawColor;
+            ctx.lineWidth = currentDrawThickness;
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+        }
+    }
+
+    function draw(e) {
+        if (!isDrawing) return;
+        
+        const rect = canvas.getBoundingClientRect();
+        const currentX = e.clientX - rect.left;
+        const currentY = e.clientY - rect.top;
+
+        if (isRulerMode) {
+             // 1. 保存した画像データを復元
+             ctx.putImageData(savedCanvasImage, 0, 0);
+
+             // 2. スナップされた座標を計算
+             const snapped = getSnappedCoordinates(startX, startY, currentX, currentY);
+
+             // 3. スナップされた線を描画
+             ctx.strokeStyle = currentDrawColor;
+             ctx.lineWidth = currentDrawThickness;
+             ctx.beginPath();
+             ctx.moveTo(startX, startY);
+             ctx.lineTo(snapped.x, snapped.y);
+             ctx.stroke();
+
+        } else {
+            // ペン/消しゴムの連続描画
+            ctx.lineTo(currentX, currentY);
+            ctx.stroke();
+            lastX = currentX;
+            lastY = currentY;
+        }
+    }
+
+    function stopDrawing(e) {
+        if (!isDrawing) return;
+        isDrawing = false;
+        
+        // 定規モードの場合は、最後に描かれた線を確定させる
+        if (isRulerMode) {
+             // 最後のマウス位置で確定線を描画
+             const rect = canvas.getBoundingClientRect();
+             const endX = e.clientX - rect.left;
+             const endY = e.clientY - rect.top;
+             
+             // 確定する前に、もう一度スナップされた座標を計算して描画
+             ctx.putImageData(savedCanvasImage, 0, 0); // ベース画像を再適用
+             const snapped = getSnappedCoordinates(startX, startY, endX, endY);
+             
+             ctx.strokeStyle = currentDrawColor;
+             ctx.lineWidth = currentDrawThickness;
+             ctx.beginPath();
+             ctx.moveTo(startX, startY);
+             ctx.lineTo(snapped.x, snapped.y);
+             ctx.stroke();
+             
+             savedCanvasImage = null; // メモリを解放
+        }
+
+        // 保存はタイマーで実行されるため、ここでは不要だが、描画が完了したことを通知
+        // showNotification('描画を保存しました'); // 頻繁すぎるので無効化
+    }
+
+    function setDrawColor(color) {
+        currentDrawColor = color;
+        // ペンモードがアクティブなら通知
+        if (currentDrawTool === 'pen') showNotification(`ペンの色を${color}に設定しました`);
+        document.querySelector('#draw-tab select:nth-of-type(1)').value = ''; 
+    }
+    
+    function setDrawThickness(thickness) {
+        currentDrawThickness = parseInt(thickness);
+        showNotification(`線の太さを${thickness}pxに設定しました`);
+        document.querySelector('#draw-tab select:nth-of-type(2)').value = ''; 
+    }
+    
+    // 🎨 Canvasへのイベントリスナーの追加
+    canvas.addEventListener('mousedown', startDrawing);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDrawing);
+    canvas.addEventListener('mouseout', stopDrawing);
+    
+    function newMemo(showNotificationFlag = true) {
+        saveCurrentMemo(); // 現在のメモを保存してから
+        editor.innerHTML = '';
+        document.getElementById('font-size-input').value = '16'; // サイズをデフォルトに戻す
+        currentMemoId = generateUUID(); // 新しいIDを割り当て
+        localStorage.setItem(CURRENT_MEMO_ID_KEY, currentMemoId);
+        showScreen('document'); // ドキュメント画面に切り替え
+        if (showNotificationFlag) {
+            showNotification('新しいメモを作成しました');
+        }
+        // 新規追加: キャンバスとdraggable-elementをクリア
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        documentContainer.querySelectorAll('.draggable-element').forEach(el => el.remove());
+
+        // 描画ツールのアクティブ状態をリセット
+        currentDrawTool = null;
+        document.querySelectorAll('#draw-tab button').forEach(btn => btn.classList.remove('active'));
+        canvas.style.pointerEvents = 'none'; // テキスト編集に戻す
+        ctx.globalCompositeOperation = 'source-over'; 
+    }
+  </script>
+</body>
+</html>
